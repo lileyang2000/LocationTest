@@ -6,12 +6,17 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.TextUtils;
+import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -21,8 +26,11 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
 
+import java.util.logging.LogRecord;
+
 public class MainActivity extends AppCompatActivity {
 
+    private static final int SHOW_LOCATION = 1 ;
     private TextView positionTextView;
     private LocationManager locationManager;
     private String provider;
@@ -35,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
         positionTextView = (TextView) findViewById(R.id.position_text_view);
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         List<String> providerList = locationManager.getProviders(true);
+        Log.e("lileyang","providerList "+ providerList);
         if (providerList.contains(LocationManager.GPS_PROVIDER)) {
             provider = LocationManager.GPS_PROVIDER;
         } else if (providerList.contains(LocationManager.NETWORK_PROVIDER)) {
@@ -52,9 +61,11 @@ public class MainActivity extends AppCompatActivity {
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
+            Log.e("lileyang","no permission");
             return;
         }
         Location location = locationManager.getLastKnownLocation(provider);
+        Log.e("lileyang","location "+location);
         if (location != null) {
             showLocation(location);
         }
@@ -63,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showLocation(final Location location) {
+        Log.e("lileyang","showLocation");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -85,7 +97,19 @@ public class MainActivity extends AppCompatActivity {
                     while ((line = reader.readLine()) != null) {
                         response.append(line);
                     }
-                    JSONObject jsonObject = new JSONObject(response.toString());
+                    Log.e("lileyang", " response " + response);
+                    if(!TextUtils.isEmpty(response.toString())) {
+                        JSONObject jsonObject = new JSONObject(response.toString());
+                        JSONArray resultArray = jsonObject.getJSONArray("results");
+                        if(resultArray.length()>0){
+                            JSONObject subObject = resultArray.getJSONObject(0);
+                            String address = subObject.getString(("formatted_address"));
+                            Message message = new Message();
+                            message.what = SHOW_LOCATION;
+                            message.obj = address;
+                            handler.sendMessage(message);
+                        }
+                    }
 
 
                 } catch (Exception ex) {
@@ -99,6 +123,22 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
+
+    private Handler handler = new Handler() {
+        public void handleMessage(Message msg){
+            switch (msg.what){
+                case SHOW_LOCATION:
+                    String currentPosition = (String)msg.obj;
+                    positionTextView.setText(currentPosition);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+
+
+
 
 
     @Override

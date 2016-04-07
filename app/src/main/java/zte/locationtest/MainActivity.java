@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v4.app.ActivityCompat;
@@ -15,6 +16,17 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.baidu.mapapi.SDKInitializer;
+import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.map.MapStatusUpdate;
+import com.baidu.mapapi.map.MapStatusUpdateFactory;
+import com.baidu.mapapi.map.MapView;
+import com.baidu.mapapi.map.MyLocationData;
+import com.baidu.mapapi.model.LatLng;
+import com.google.android.gms.appindexing.Action;
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.common.api.GoogleApiClient;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -30,20 +42,29 @@ import java.util.logging.LogRecord;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int SHOW_LOCATION = 1 ;
-    private TextView positionTextView;
+    private static final int SHOW_LOCATION = 1;
+  //  private TextView positionTextView;
     private LocationManager locationManager;
+
+    private MapView mapView;
+    private BaiduMap baiduMap;
     private String provider;
+    private boolean isFirstLocate = true;
+
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        SDKInitializer.initialize(getApplicationContext());
         setContentView(R.layout.activity_main);
-        positionTextView = (TextView) findViewById(R.id.position_text_view);
+        mapView = (MapView) findViewById(R.id.map_view);
+        baiduMap = mapView.getMap();
+        baiduMap.setMyLocationEnabled(true);
+
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         List<String> providerList = locationManager.getProviders(true);
-        Log.e("lileyang","providerList "+ providerList);
+        Log.e("lileyang", "providerList " + providerList);
         if (providerList.contains(LocationManager.GPS_PROVIDER)) {
             provider = LocationManager.GPS_PROVIDER;
         } else if (providerList.contains(LocationManager.NETWORK_PROVIDER)) {
@@ -61,20 +82,23 @@ public class MainActivity extends AppCompatActivity {
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
-            Log.e("lileyang","no permission");
+            Log.e("lileyang", "no permission");
             return;
         }
-        Location location = locationManager.getLastKnownLocation(provider);
-        Log.e("lileyang","location "+location);
-        if (location != null) {
-            showLocation(location);
+        Location location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+
+        Log.e("lileyang", "location " + location);
+        if (location != null||true) {
+           // showLocation(location);
+            navigateTo(location);
         }
 
         locationManager.requestLocationUpdates(provider, 5000, 1, locationListener);
+
     }
 
     private void showLocation(final Location location) {
-        Log.e("lileyang","showLocation");
+        Log.e("lileyang", "showLocation");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -98,10 +122,10 @@ public class MainActivity extends AppCompatActivity {
                         response.append(line);
                     }
                     Log.e("lileyang", " response " + response);
-                    if(!TextUtils.isEmpty(response.toString())) {
+                    if (!TextUtils.isEmpty(response.toString())) {
                         JSONObject jsonObject = new JSONObject(response.toString());
                         JSONArray resultArray = jsonObject.getJSONArray("results");
-                        if(resultArray.length()>0){
+                        if (resultArray.length() > 0) {
                             JSONObject subObject = resultArray.getJSONObject(0);
                             String address = subObject.getString(("formatted_address"));
                             Message message = new Message();
@@ -125,20 +149,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Handler handler = new Handler() {
-        public void handleMessage(Message msg){
-            switch (msg.what){
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
                 case SHOW_LOCATION:
-                    String currentPosition = (String)msg.obj;
-                    positionTextView.setText(currentPosition);
+                    String currentPosition = (String) msg.obj;
+               //     positionTextView.setText(currentPosition);
                     break;
                 default:
                     break;
             }
         }
     };
-
-
-
 
 
     @Override
@@ -157,12 +178,17 @@ public class MainActivity extends AppCompatActivity {
             }
             locationManager.removeUpdates(locationListener);
         }
+        baiduMap.setMyLocationEnabled(false);
+        mapView.onDestroy();
+
     }
 
     LocationListener locationListener = new LocationListener() {
         @Override
-        public void onLocationChanged(Location location) {
-            showLocation(location);
+        public void onLocationChanged(Location location){
+            if(location!=null){
+                navigateTo(location);
+            }
         }
 
         @Override
@@ -180,4 +206,37 @@ public class MainActivity extends AppCompatActivity {
 
         }
     };
+
+    private void navigateTo(Location location) {
+        if(isFirstLocate){
+            LatLng ll;
+            if(location!=null) {
+               ll = new LatLng(location.getLatitude(), location.getLongitude());
+            }else{
+                 ll = new LatLng(39.915,116.404);
+            }
+            MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(ll);
+            baiduMap.animateMapStatus(update);
+            update = MapStatusUpdateFactory.zoomTo(16f);
+            baiduMap.animateMapStatus(update);
+            isFirstLocate = false;
+        }
+        MyLocationData.Builder locationBuilder = new MyLocationData.Builder();
+        locationBuilder.latitude(39.915);
+        locationBuilder.longitude(116.404);
+        MyLocationData locationData = locationBuilder.build();
+        baiduMap.setMyLocationData(locationData);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mapView.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mapView.onPause();
+    }
 }
